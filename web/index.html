@@ -1,0 +1,499 @@
+<html>
+
+<head>
+  <title>Yearly Review</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      background: #222;
+    }
+
+    main>section {
+      display: flex;
+      height: 100vh;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* main>section:nth-child(even) {
+      background: #ccc;
+    } */
+
+    main>section>article {
+      background: #fff;
+    }
+
+    @media (orientation: portrait) {
+      main>section>svg,
+      main>section>article {
+        width: calc(100vw - 80px);
+        height: calc((100vw - 80px) * 16 / 9);
+      }
+    }
+
+    @media (orientation: landscape) {
+      main {
+        display: flex;
+        flex-direction: row;
+        overflow-y: hidden;
+        overflow-x: auto;
+        height: 100vh;
+      }
+
+      main>section {
+        margin-left: 40px;
+        height: 100%;
+      }
+
+      main>section:last-of-type {
+        margin-right: 40px;
+      }
+
+      main>section:nth-child(even) {
+        background: none;
+      }
+
+      main>section>svg,
+      main>section>article {
+        width: calc((100vh - 80px) * 9 / 16);
+        height: calc(100vh - 80px);
+      }
+    }
+
+    #sleepless p, h1, h2, h3 {
+      font-family: Oswald;
+      text-align: center;
+    }
+
+    #sleepless .date {
+      color: #ff9800;
+    }
+
+    #sleepless time {
+      color: #e91e63;
+    }
+
+    #sleepless p {
+      text-align: center;
+      font-size: 28px;
+      color: #999;
+    }
+
+    #sleepless p.cover {
+      margin-top: 30%;
+    }
+
+    #sleepless p.cover>img {
+      box-shadow: 0 0 56px 2px #424242ab;
+    }
+
+    #sleepless h2 {
+      color: #3c505a;
+      font-size: 56px;
+      margin: 20px;
+    }
+
+    #sleepless h3 {
+      color: #323232;
+      font-size: 24px;
+      margin: 0;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <main>
+    <section id="top-songs"></section>
+    <section id="artists"></section>
+    <section id="genre"></section>
+    <section id="sleepless">
+      <article>
+        <p class="cover">
+          <img alt="Artwork"
+            src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAoMBgDTD2qgAAAAASUVORK5CYII="
+            width="40%">
+        </p>
+        <h2 class="title">{{ title }}</h2>
+        <h3 class="artist">{{ artist }}</h3>
+        <p>On <span class="date">{{ date }}</span>,<br>
+          you were still listening to <br>
+          this song at <time>{{ time }}</time></p>
+        <p>What a sleepless night</p>
+      </article>
+    </section>
+    <section id="hourly"></section>
+    <section id="monthly"></section>
+  </main>
+
+  <script src="d3.layout.cloud.js"></script>
+  <script src="d3.v7.min.js"></script>
+  <script>
+    function truncate(text, max = 30) {
+      if (typeof text !== 'string') return ''
+      if (text.length > max) return text.substring(0, max) + '...'
+      return text
+    }
+
+    const W = 1080;
+    const H = 1920;
+
+    async function singers() {
+      const json = await d3.json('data/artists.json');
+
+      let max = -Infinity
+      let min = +Infinity
+
+      const words = json.map(e => {
+        const [text, size] = e
+        if (size > max) max = size;
+        else if (size < min) min = size;
+        return { text, size }
+      }).slice(0, 100);
+
+      const color = d3.scaleSequential().domain([min, max])
+        .interpolator(d3.interpolate("#fc3", "#f06"));
+
+      const layout = d3.layout.cloud()
+        .size([W, H])
+        .words(words)
+        .padding(0)
+        .rotate(function () { return (~~(Math.random() * 4) - 2) * 30; })
+        .font("Oswald")
+        .spiral("archimedean")
+        .fontSize(function (d) { return Math.sqrt(d.size) * 10 + 10 })
+        .on("end", draw)
+
+      layout.start();
+
+      function draw(words) {
+        const [w, h] = layout.size()
+        d3.select("#artists")
+          .append("svg")
+          .attr('viewBox', '0 0 1080 1920')
+          .style('background', '#fff')
+          .append("g")
+          .attr("transform", `translate(${w / 2},${h / 2})`)
+          .selectAll('text')
+          .data(words)
+          .enter().append('text')
+          .attr('fill', d => color(d.size))
+          .style("font-size", function (d) { return (5 + d.size) + "px"; })
+          .style("font-family", "Oswald")
+          .attr("text-anchor", "middle")
+          .attr("transform", function (d) {
+            return `translate(${[d.x, d.y]}) rotate(${d.rotate})`;
+          })
+          .text(function (d) { return d.text; });
+      }
+    }
+
+    async function topSongs() {
+      const color = d3.scaleSequential().domain([10, 0])
+        .interpolator(d3.interpolate("#fc3", "#f06"));
+      const data = await d3.json('data/songs.json')
+      const group = d3.select('#top-songs')
+        .append('svg')
+        .attr('viewBox', `0 0 ${W} ${H}`)
+        .style('background', '#fff')
+        .append('g')
+        .attr('transform', `translate(60, 200)`)
+
+      group
+        .selectAll('text')
+        .data(data)
+        .enter().append('text')
+        .style("font-family", "Oswald")
+        .style("font-size", '60px')
+        .attr('fill', (d, i) => color(i))
+        .attr('transform', (d, i) => `translate(${[150, i * 160 + 80]})`)
+        .text(d => truncate(d.trackName))
+
+      group
+        .selectAll('image')
+        .data(data)
+        .enter().append('image')
+        .attr('height', 120)
+        .attr('width', 120)
+        .attr('transform', (d, i) => `translate(${[0, i * 160]})`)
+        .attr('xlink:href', d => d.artworkUrl100)
+    }
+
+    async function insomnia() {
+      const data = await d3.json('data/sleepless.json');
+      const parent = d3.select('#sleepless');
+      parent.select('img')
+        .attr('src', data.artwork)
+
+      const date = new Date(data.timestamp)
+      parent.select('.title')
+        .text(data.title)
+
+      parent.select('.artist')
+        .text(data.artist)
+
+      parent.select('.date')
+        .text(date.toLocaleDateString())
+
+      parent.select('time')
+        .text(`${date.getHours()}:${date.getMinutes()} am`);
+    }
+
+    async function genre() {
+      const raw = await d3.json('data/genre.json');
+      const svg = d3.select('#genre')
+        .append('svg')
+        .attr('viewBox', `0 0 ${W} ${H}`)
+        .style('background', '#fff')
+        .attr('width', W)
+        .attr('height', H);
+
+      const data = [...Object.entries(raw)].map(([name, value]) => {
+        return { name, value }
+      });
+
+      const max = Math.max(...Object.values(raw));
+      const min = Math.min(...Object.values(raw));
+
+      const size = d3.scaleLinear()
+        .domain([min, max])
+        .range([60, 200]);
+
+      const fontSize = d3.scaleLinear()
+        .domain([min, max])
+        .range([24, 72]);
+
+      const simulation = d3.forceSimulation()
+        .force("center", d3.forceCenter().x(W / 2).y(H / 2))
+        .force("charge", d3.forceManyBody().strength(.1))
+        .force("collide", d3.forceCollide().strength(.2).radius(
+          d => size(d.value) + 3).iterations(1))
+
+      const group = svg.append('g')
+      const node = group
+        .selectAll('circle')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr("cx", W / 2)
+        .attr("cy", H / 2)
+        .attr("r", d => size(d.value))
+        .style("fill", (d, i) => d3.schemePastel1[i % 9])
+        .style("fill-opacity", 0.8)
+        .attr("stroke", "rgba(0, 0, 0, .3)")
+        .style("stroke-width", 1)
+        .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended))
+
+      const labels = group
+        .selectAll('text')
+        .data(data)
+        .enter()
+        .append('text')
+        .attr('text-anchor', "middle")
+        .style("font-family", "Oswald")
+        .style('font-size', d => fontSize(d.value) + 'px')
+        .attr('fill', (d, i) => d3.color(d3.schemePastel1[i % 9]).darker(2.5))
+        .text(d => d.name)
+        .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended))
+
+      simulation
+        .nodes(data)
+        .on("tick", function (d) {
+          node
+            .attr("cx", function (d) { return d.x; })
+            .attr("cy", function (d) { return d.y; })
+          labels
+            .attr("x", function (d) { return d.x; })
+            .attr("y", function (d) { return d.y; })
+        });
+
+      function dragstarted(e, d) {
+        if (!e.active) simulation.alphaTarget(.03).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      }
+
+      function dragged(e, d) {
+        d.fx = e.x;
+        d.fy = e.y;
+      }
+
+      function dragended(e, d) {
+        if (!e.active) simulation.alphaTarget(.03);
+        d.fx = null;
+        d.fy = null;
+      }
+    }
+
+    async function monthly() {
+      const raw = await d3.json('data/monthly.json');
+
+      const margin = { top: 40, right: 40, bottom: 40, left: 40 };
+      const width = W - margin.left - margin.right;
+      const height = H / 3 - margin.top - margin.bottom;
+
+      const svg = d3.select('#monthly')
+        .append('svg')
+        .attr('viewBox', `0 0 ${W} ${H}`)
+        .style('background', '#fff')
+        .attr('width', W)
+        .attr('height', H)
+
+      const graph = svg.append('g')
+        .attr('width', width)
+        .attr('height', height)
+        .attr('transform', `translate(${margin.left}, ${H / 3 * 2 + margin.top})`);
+
+      let min = -Math.Infinity, max = Math.Infinity;
+      const data = [...Object.entries(raw)].map(([month, value]) => {
+        if (value < min) min = v;
+        else if (value > max) max = v;
+
+        return {
+          month, value
+        }
+      });
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.value)])
+        .range([height, 0]);
+
+      const x = d3.scaleBand()
+        .domain(data.map(item => item.month))
+        .range([0, width])
+        .paddingInner(0)
+        .paddingOuter(0);
+
+      const rects = graph.selectAll('rect')
+        .data(data);
+
+      rects.attr('width', x.bandwidth)
+        .attr('class', 'bar-rect')
+        .attr('height', d => height - y(d.value))
+        .attr('x', d => x(d.month))
+        .attr('y', d => y(d.value))
+        .style('content', d => d.value)
+
+      rects.enter()
+        .append('rect')
+        .attr('class', 'bar-rect')
+        .attr('width', x.bandwidth)
+        .attr('height', d => height - y(d.value))
+        .attr('fill', (d, i) => d3.schemePastel1[i % 9])
+        .attr('x', d => x(d.month))
+        .attr('y', d => y(d.value));
+
+      svg
+        .append('text')
+        .text('Seasons go by')
+        .style('font-family', 'Oswald')
+        .style('font-size', '72px')
+        .attr('text-anchor', "middle")
+        .attr('transform', `translate(${W / 2}, 240)`);
+
+      svg
+        .append('text')
+        .text('The show must go on')
+        .style('font-family', 'Oswald')
+        .style('font-size', '72px')
+        .attr('text-anchor', "middle")
+        .attr('transform', `translate(${W / 2}, 360)`);
+    }
+
+    async function hourly() {
+      const raw = (await d3.json('data/hourly.json'))
+        .map(e => e / 3600 / 1000);
+
+      const margin = { top: 40, right: 40, bottom: 40, left: 40 };
+      const width = W - margin.left - margin.right;
+      const height = H / 2 - margin.top - margin.bottom;
+
+      const svg = d3.select('#hourly')
+        .append('svg')
+        .attr('viewBox', `0 0 ${W} ${H}`)
+        .style('background', '#fff')
+        .attr('width', W)
+        .attr('height', H)
+
+      const graph = svg.append('g')
+        .attr('width', width)
+        .attr('height', height)
+        .attr('transform', `translate(${margin.left}, ${H / 2 + margin.top})`);
+
+      const min = Math.min(...raw);
+      const max = Math.max(...raw);
+      const data = raw.map((value, hour) => {
+        return { hour, value }
+      });
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.value)])
+        .range([height, 0]);
+
+      const x = d3.scaleBand()
+        .domain(data.map(item => item.hour))
+        .range([0, width])
+        .paddingInner(0)
+        .paddingOuter(0);
+
+      const rects = graph.selectAll('rect')
+        .data(data);
+
+      rects.attr('width', x.bandwidth)
+        .attr('class', 'bar-rect')
+        .attr('height', d => height - y(d.value))
+        .attr('x', d => x(d.hour))
+        .attr('y', d => y(d.value))
+        .style('content', d => d.value)
+
+      rects.enter()
+        .append('rect')
+        .attr('class', 'bar-rect')
+        .attr('width', x.bandwidth)
+        .attr('height', d => height - y(d.value))
+        .attr('fill', (d, i) => d3.schemePastel1[i % 9])
+        .attr('x', d => x(d.hour))
+        .attr('y', d => y(d.value));
+
+      {
+        const fav = raw.indexOf(Math.max(...raw));
+        const n = fav % 12 || 12;
+        const suffix = fav < 12 ? 'AM' : 'PM';
+        svg.append('text')
+          .text(`Your favorite music hour is`)
+          .style('font-family', 'Oswald')
+          .style('font-size', '72px')
+          .attr('text-anchor', "middle")
+          .attr('transform', `translate(${W / 2}, 240)`);
+        
+        svg.append('text')
+          .style('font-family', 'Oswald')
+          .style('font-size', '128px')
+          .attr('text-anchor', "middle")
+          .attr('fill', 'rbg(194, 215, 233)')
+          .text(`${n} ${suffix}`)
+          .attr('transform', `translate(${W / 2}, 480)`);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", function (e) {
+      hourly();
+      singers();
+      topSongs();
+      insomnia();
+      monthly();
+      genre();
+    });
+  </script>
+</body>
+
+</html>
