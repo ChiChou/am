@@ -43,3 +43,4 @@ The visualized data will be under `web/data`. You need a static http server (e.g
 ![Favorite Artists](img/singers.png)
 ![Favorite Hour](img/hourly.png)
 ![Monthly Usage](img/monthly.png)
+![Monthly Usage](img/stayup.png)
